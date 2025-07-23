@@ -14,7 +14,7 @@ creds = Credentials.from_service_account_info(
             "https://www.googleapis.com/auth/drive"]
     )
 
-#  gspread クライアント作成
+#  gspread  クライアント作成
 client = gspread.authorize(creds)
 
 # スプレッドシートを開く（名前）

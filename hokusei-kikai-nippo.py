@@ -2,7 +2,7 @@ import gspread
 import streamlit as st
 from oauth2client.service_account import ServiceAccountCredentials
 
-# --- 認証情報読み込み ---
+# --- 認証情報読み込み  ---
 google_cloud_secret = st.secrets["google_cloud"]
 service_account_info = {
     "type": google_cloud_secret["type"],
