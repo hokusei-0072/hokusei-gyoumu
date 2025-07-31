@@ -37,7 +37,7 @@ def get_sheet():
 
 sheet = get_sheet()
 
-# --- UI ---
+# --- UI  ---
 st.title('北青 機械課 作業日報')
 st.caption("メーカー名、工番、作業内容、時間を入力してください。")
 
