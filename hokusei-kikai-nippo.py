@@ -69,7 +69,7 @@ def create_input_fields(index):
         key=f'genre_{index}'
     ) if customer != '選択してください' else '選択してください'
 
-    number = st.text_input(f'工番を入力{index}', key=f'number_{index}', placeholder="例: 51a111") if genre != '選択してください' else ''
+    number = st.text_input(f'工番を入力{index}', key=f'number_{index}', placeholder="例: 51a111").upper() if genre != '選択してください' else ''
 
     # --- 時間入力（プレースホルダ付きテキスト） ---
     time_input = st.text_input(f'時間を入力{index}', key=f'time_{index}', placeholder="例: 1.5")
@@ -124,7 +124,7 @@ if valid_inputs:
             row = [
                 str(day),
                 name,
-                inp["new_customer"] if inp["customer"] == "その他" else inp["customer"],
+                inp["new_customer"] if inp["customer"] == "その他メーカー" else inp["customer"],
                 inp["genre"],
                 inp["number"],
                 inp["time"]
