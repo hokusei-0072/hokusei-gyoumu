@@ -63,11 +63,15 @@ def create_input_fields(index):
     if customer == 'その他メーカー':
         new_customer = st.text_input(f'メーカー名を入力{index}', key=f'new_customer_{index}', placeholder="メーカー名を入力")
 
-    genre = st.selectbox(
-        f'作業内容{index}',
-        ('選択してください', '新規', '改修', 'その他'),
-        key=f'genre_{index}'
-    ) if customer != '選択してください' else '選択してください'
+      # 👇 作業内容の選択肢：雑務以外なら表示
+    if customer not in ('選択してください', '雑務'):
+        genre = st.selectbox(
+            f'作業内容{index}',
+            ('選択してください', '新規', '改修', 'その他'),
+            key=f'genre_{index}'
+        )
+    else:
+        genre = ''  # 雑務なら作業内容は空欄
 
     number = st.text_input(f'工番を入力{index}', key=f'number_{index}', placeholder="例: 51A111").upper() if genre != '選択してください' else ''
 
