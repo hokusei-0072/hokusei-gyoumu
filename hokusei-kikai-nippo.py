@@ -55,12 +55,12 @@ def create_input_fields(index):
 
     customer = st.selectbox(
         f'メーカー{index}',
-        ('選択してください', 'ジーテクト', 'ヨロズ', '城山', 'タチバナ', '浜岳', '三池', '東プレ', '千代田', '武部', 'インフェック', '雑務','その他'),
+        ('選択してください', 'ジーテクト', 'ヨロズ', '城山', 'タチバナ', '浜岳', '三池', '東プレ', '千代田', '武部', 'インフェック', '雑務','その他メーカー'),
         key=f'customer_{index}'
     )
 
     new_customer = ''
-    if customer == 'その他':
+    if customer == 'その他メーカー':
         new_customer = st.text_input(f'メーカー名を入力{index}', key=f'new_customer_{index}', placeholder="メーカー名を入力")
 
     genre = st.selectbox(
