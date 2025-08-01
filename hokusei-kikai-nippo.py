@@ -125,7 +125,7 @@ if valid_inputs:
                 str(day),
                 name,
                 inp["new_customer"] if inp["customer"] == "その他メーカー" else inp["customer"],
-                inp["genre"],
+                "" if inp["customer"] == "雑務" else inp["genre"],  # 👈 作業内容を空白に
                 inp["number"],
                 inp["time"]
             ]
