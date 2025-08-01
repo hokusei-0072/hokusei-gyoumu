@@ -55,12 +55,12 @@ def create_input_fields(index):
 
     customer = st.selectbox(
         f'メーカー{index}',
-        ('選択してください', 'ジーテクト', 'ヨロズ', '城山', 'タチバナ', '浜岳', '三池', '東プレ', '千代田','雑務','その他'),
+        ('選択してください', 'ジーテクト', 'ヨロズ', '城山', 'タチバナ', '浜岳', '三池', '東プレ', '千代田','雑務','その他メーカー'),
         key=f'customer_{index}'
     )
 
     new_customer = ''
-    if customer == 'その他':
+    if customer == 'その他メーカー':
         new_customer = st.text_input(f'メーカー名を入力{index}', key=f'new_customer_{index}', placeholder="メーカー名を入力")
 
     genre = st.selectbox(
@@ -69,7 +69,7 @@ def create_input_fields(index):
         key=f'genre_{index}'
     ) if customer != '選択してください' else '選択してください'
 
-    number = st.text_input(f'工番を入力{index}', key=f'number_{index}', placeholder="例: 51a111") if genre != '選択してください' else ''
+    number = st.text_input(f'工番を入力{index}', key=f'number_{index}', placeholder="例: 51A111").upper() if genre != '選択してください' else ''
 
     # --- 時間入力（プレースホルダ付きテキスト） ---
     time_input = st.text_input(f'時間を入力{index}', key=f'time_{index}', placeholder="例: 1.5")
@@ -124,7 +124,7 @@ if valid_inputs:
             row = [
                 str(day),
                 name,
-                inp["new_customer"] if inp["customer"] == "その他" else inp["customer"],
+                inp["new_customer"] if inp["customer"] == "その他メーカー" else inp["customer"],
                 inp["genre"],
                 inp["number"],
                 inp["time"]
