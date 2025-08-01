@@ -56,21 +56,25 @@ def create_input_fields(index):
 
     customer = st.selectbox(
         f'メーカー{index}',
-        ('選択してください', 'ジーテクト', 'ヨロズ', '城山', 'タチバナ', '浜岳', '三池', '東プレ', '千代田', '雑務','その他'),
+        ('選択してください', 'ジーテクト', 'ヨロズ', '城山', 'タチバナ', '浜岳', '三池', '東プレ', '千代田', '雑務','その他メーカー'),
         key=f'customer_{index}'
     )
 
     new_customer = ''
-    if customer == 'その他':
+    if customer == 'その他メーカー':
         new_customer = st.text_input(f'メーカー名を入力{index}', key=f'new_customer_{index}', placeholder="メーカー名を入力")
 
-    genre = st.selectbox(
-        f'作業内容{index}',
-        ('選択してください', '新規', '玉成','設変','パネル','トライ','その他'),
-        key=f'genre_{index}'
-    ) if customer != '選択してください' else '選択してください'
-
-    number = st.text_input(f'工番を入力{index}', key=f'number_{index}', placeholder="例: 51a111") if genre != '選択してください' else ''
+    # 👇 作業内容の選択肢：雑務以外なら表示
+    if customer not in ('選択してください', '雑務'):
+        genre = st.selectbox(
+            f'作業内容{index}',
+            ('選択してください', '新規', '改修', 'その他'),
+            key=f'genre_{index}'
+        )
+    else:
+        genre = ''  # 雑務なら作業内容は空欄
+        
+    number = st.text_input(f'工番を入力{index}', key=f'number_{index}', placeholder="例: 51A111").upper() if genre != '選択してください' else ''
 
     # --- 時間入力（プレースホルダ付きテキスト） ---
     time_input = st.text_input(f'時間を入力{index}', key=f'time_{index}', placeholder="例: 1.5")
@@ -122,11 +126,11 @@ if valid_inputs:
     if st.button("送信"):
         rows_to_append = []
         for inp in valid_inputs:
-            row = [
+             row = [
                 str(day),
                 name,
-                inp["new_customer"] if inp["customer"] == "その他" else inp["customer"],
-                inp["genre"],
+                inp["new_customer"] if inp["customer"] == "その他メーカー" else inp["customer"],
+                "" if inp["customer"] == "雑務" else inp["genre"],  # 👈 作業内容を空白に
                 inp["number"],
                 inp["time"]
             ]
