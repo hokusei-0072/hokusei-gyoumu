@@ -126,7 +126,7 @@ if valid_inputs:
     if st.button("送信"):
         rows_to_append = []
         for inp in valid_inputs:
-             row = [
+            row = [
                 str(day),
                 name,
                 inp["new_customer"] if inp["customer"] == "その他メーカー" else inp["customer"],
