@@ -68,7 +68,7 @@ def create_input_fields(index):
     if customer not in ('選択してください', '雑務'):
         genre = st.selectbox(
             f'作業内容{index}',
-            ('選択してください', '新規', '改修', 'その他'),
+            ('選択してください', '新規','玉成','設変','パネル','トライ','その他'),
             key=f'genre_{index}'
         )
     else:
