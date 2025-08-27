@@ -55,7 +55,7 @@ def create_input_fields(index):
 
     customer = st.selectbox(
         f'メーカー{index}',
-        ('選択してください', 'ジーテクト', 'ヨロズ', '城山', 'タチバナ', '浜岳', '三池', '東プレ', '千代田','雑務','その他メーカー'),
+        ('選択してください', 'ジーテクト', 'ヨロズ', '城山', 'タチバナ', '浜岳', '三池', '東プレ', '東海鉄工所','坪山'.'千代田','雑務','その他メーカー'),
         key=f'customer_{index}'
     )
 
@@ -98,7 +98,7 @@ for i in range(1, st.session_state.form_count + 1):
     inputs.append(create_input_fields(i))
 
 # --- 「次へ」ボタン（最大5件） ---
-if st.session_state.form_count < 5:
+if st.session_state.form_count < 8:
     if st.button("次へ"):
         st.session_state.form_count += 1
         st.rerun()  # ✅ 即時再描画で次のフォームを表示！
