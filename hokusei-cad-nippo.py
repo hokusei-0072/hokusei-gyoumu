@@ -98,7 +98,7 @@ for i in range(1, st.session_state.form_count + 1):
     inputs.append(create_input_fields(i))
 
 # --- 「次へ」ボタン（最大5件） ---
-if st.session_state.form_count < 8:
+if st.session_state.form_count < 10:
     if st.button("次へ"):
         st.session_state.form_count += 1
         st.rerun()  # ✅ 即時再描画で次のフォームを表示！
