@@ -42,9 +42,13 @@ sheet = get_sheet()
 # --- UI ---
 st.title('北青 CAD課作業日報')
 st.text("メーカー名、工番、作業内容、時間を入力してください。")
+
+# リリースノート
 R_CHECK = st.checkbox("リリースノート(2025/08/29更新)")
 if R_CHECK:
-    st.text("メーカー名に”坪山”を追加しました！\n●一度に送信できる作業を10件まで増やしました！")
+    st.text("メーカー名に”坪山”を追加しました。\n●一度に送信できる作業を10件まで増やしました。")
+    
+# 説明文   
 st.text("工番に関わる仕事以外の場合はメーカー名の欄で雑務を選択し\n工番に作業の内容(CAD室の清掃など)を入力してください")
 
 day = st.date_input("日付を選択してください")
@@ -155,3 +159,5 @@ if valid_inputs:
         for i in range(len(rows_to_append)):
             if i == len(rows_to_append) - 1:  # 最後の行だけ
                 sheet.update_cell(start_row + i, 7, f"合計 {total_time:.2f} 時間")
+                
+  ##### プログラムエンド #####              
