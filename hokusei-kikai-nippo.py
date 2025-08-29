@@ -1,3 +1,5 @@
+# 2025/08/29 編集
+
 import gspread
 import streamlit as st
 from oauth2client.service_account import ServiceAccountCredentials
@@ -40,6 +42,13 @@ sheet = get_sheet()
 # --- UI ---
 st.title('北青 機械課 作業日報')
 st.caption("メーカー名、工番、作業内容、時間を入力してください。")
+
+# リリースノート
+R_CHECK = st.checkbox("リリースノート(2025/08/29更新)")
+if R_CHECK:
+    st.text("●一度に送信できる作業を10件まで増やしました。\n●メーカーに東海鉄工所を追加。")
+
+# 説明文
 st.text("工番に関わる仕事以外の場合はメーカー名の欄で雑務を選択し\n工番に作業の内容(機械の清掃など)を入力してください")
 
 day = st.date_input("日付を選択してください")
@@ -96,8 +105,8 @@ inputs = []
 for i in range(1, st.session_state.form_count + 1):
     inputs.append(create_input_fields(i))
 
-# --- 「次へ」ボタン（最大5件） ---
-if st.session_state.form_count < 5:
+# --- 「次へ」ボタン（最大10件） ---
+if st.session_state.form_count < 10:
     if st.button("次へ"):
         st.session_state.form_count += 1
         st.rerun()  # ✅ 即時再描画で次のフォームを表示！
@@ -152,3 +161,5 @@ if valid_inputs:
 
         st.success("作業内容を送信しました。お疲れ様でした！ 🎉")
         st.session_state.form_count = 1
+
+##### プログラムエンド #####
