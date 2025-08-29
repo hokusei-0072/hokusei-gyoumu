@@ -159,5 +159,7 @@ if valid_inputs:
         for i in range(len(rows_to_append)):
             if i == len(rows_to_append) - 1:  # 最後の行だけ
                 sheet.update_cell(start_row + i, 7, f"合計 {total_time:.2f} 時間")
-                
+        st.success("作業内容を送信しました。お疲れ様でした！ 🎉")
+        st.session_state.form_count = 1  
+
   ##### プログラムエンド #####              
