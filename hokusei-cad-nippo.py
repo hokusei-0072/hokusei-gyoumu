@@ -43,6 +43,8 @@ sheet = get_sheet()
 st.title('北青 CAD課作業日報')
 st.text("メーカー名、工番、作業内容、時間を入力してください。")
 
+st.markdown("連絡事項\nお知らせ")
+
 # リリースノート
 R_CHECK = st.checkbox("リリースノート(2025/08/29更新)")
 if R_CHECK:
