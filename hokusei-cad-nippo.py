@@ -3,7 +3,6 @@
 import gspread
 import streamlit as st
 from oauth2client.service_account import ServiceAccountCredentials
-
 # --- 認証情報読み込み  ---
 google_cloud_secret = st.secrets["google_cloud"]
 service_account_info = {
@@ -19,7 +18,6 @@ service_account_info = {
     "client_x509_cert_url": google_cloud_secret["client_x509_cert_url"],
     "universe_domain": google_cloud_secret["universe_domain"]
 }
-
 # ✅ キャッシュ付きシート取得関数
 @st.cache_resource
 def get_sheet():
@@ -34,25 +32,32 @@ def get_sheet():
     )
     gc = gspread.authorize(creds)
     spreadsheet_id = "1OHkocLV4MiYFgim2fARSSQzSrQcW3njvnnnhgkMm-l4"
-
     return gc.open_by_key(spreadsheet_id).sheet1
-
 sheet = get_sheet()
 
-# --- UI ---
+
+
+
+##### アプリ表示開始 #####
+### タイトル ###
 st.title('北青 CAD課作業日報')
 st.text("メーカー名、工番、作業内容、時間を入力してください。")
 
+### 連絡事項 ###
 #st.markdown("# お知らせ")
 
-# リリースノート
+### リリースノート ###
 R_CHECK = st.checkbox("リリースノート(2025/08/29更新)")
 if R_CHECK:
     st.text("●メーカー名に”坪山”を追加しました。\n●一度に送信できる作業を10件まで増やしました。")
     
-# 説明文   
+### 説明文 ###  
 st.text("工番に関わる仕事以外の場合はメーカー名の欄で雑務を選択し\n工番に作業の内容(CAD室の清掃など)を入力してください")
 
+
+
+
+### 入力フォーム開始 ###
 day = st.date_input("日付を選択してください")
 name = st.selectbox('名前', ('選択してください', "富寛","鈴木","斎藤","古郡"))
 
