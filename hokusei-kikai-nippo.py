@@ -54,112 +54,114 @@ st.text("工番に関わる仕事以外の場合はメーカー名の欄で雑�
 day = st.date_input("日付を選択してください")
 name = st.selectbox('名前', ('選択してください', '大地', '山岸', '坂本', '一條', '松本', '将', '出繩'))
 
-# --- セッション初期化 ---
-if "form_count" not in st.session_state:
-    st.session_state.form_count = 1
-
-# --- 入力フォーム定義 ---
-def create_input_fields(index):
-    st.markdown(f"---\n### 作業 {index}")
-
-    customer = st.selectbox(
-        f'メーカー{index}',
-        ('選択してください', 'ジーテクト', 'ヨロズ', '城山', 'タチバナ', '浜岳', '三池', '東プレ', '千代田', '武部', 'インフェック','東海鉄工所','雑務','その他メーカー'),
-        key=f'customer_{index}'
-    )
-
-    new_customer = ''
-    if customer == 'その他メーカー':
-        new_customer = st.text_input(f'メーカー名を入力{index}', key=f'new_customer_{index}', placeholder="メーカー名を入力")
-
-      # 👇 作業内容の選択肢：雑務以外なら表示
-    if customer not in ('選択してください', '雑務'):
-        genre = st.selectbox(
-            f'作業内容{index}',
-            ('選択してください', '新規', '改修', 'その他'),
-            key=f'genre_{index}'
-        )
-    else:
-        genre = ''  # 雑務なら作業内容は空欄
-
-    number = st.text_input(f'工番を入力{index}', key=f'number_{index}', placeholder="例: 51A111").upper() if genre != '選択してください' else ''
-
-    # --- 時間入力（プレースホルダ付きテキスト） ---
-    time_input = st.text_input(f'時間を入力{index}', key=f'time_{index}', placeholder="例: 1.5")
-    try:
-        time = float(time_input) if time_input.strip() != "" else 0.0
-    except ValueError:
-        st.warning(f"時間{index}は数値で入力してください")
-        time = 0.0
-
-    return {
-        "customer": customer,
-        "new_customer": new_customer,
-        "genre": genre,
-        "number": number,
-        "time": time
-    }
-
-# --- 入力フォームの表示 ---
-inputs = []
-for i in range(1, st.session_state.form_count + 1):
-    inputs.append(create_input_fields(i))
-
-# --- 「次へ」ボタン（最大10件） ---
-if st.session_state.form_count < 10:
-    if st.button("次へ"):
-        st.session_state.form_count += 1
-        st.rerun()  # ✅ 即時再描画で次のフォームを表示！
-
-# --- 有効データ抽出 ---
-valid_inputs = []
-total_time = 0.0
-
-for inp in inputs:
-    if (
-        inp["customer"] != "選択してください"
-        and inp["genre"] != "選択してください"
-        and inp["number"] != ''
-        and inp["time"] > 0
-    ):
-        total_time += inp["time"]
-        valid_inputs.append(inp)
-
-# --- 合計時間表示 ---
-if total_time > 0:
-    st.markdown(f"### ✅ 合計時間: {total_time:.2f} 時間")
-
-# --- 送信ボタン（有効データがある時だけ表示） ---
-if valid_inputs:
-    if st.button("送信"):
-        rows_to_append = []
-        for inp in valid_inputs:
-            row = [
-                str(day),
-                name,
-                inp["new_customer"] if inp["customer"] == "その他メーカー" else inp["customer"],
-                "" if inp["customer"] == "雑務" else inp["genre"],  # 👈 作業内容を空白に
-                inp["number"],
-                inp["time"]
-            ]
-            rows_to_append.append(row)
-
-        # ✅ 現在のシート行数を取得
-        current_rows = len(sheet.get_all_values())
-
-        # ✅ 一括送信
-        sheet.append_rows(rows_to_append)
-
-        # ✅ 送信した最初の行番号（1オリジン）
-        start_row = current_rows + 1
-        end_row = start_row + len(rows_to_append) - 1
-
-        # ✅ 同じ日付＋名前の最後の行にだけ total_time を入れる
-        for i in range(len(rows_to_append)):
-            if i == len(rows_to_append) - 1:  # 最後の行だけ
-                sheet.update_cell(start_row + i, 7, f"合計 {total_time:.2f} 時間")
-
-        st.success("作業内容を送信しました。お疲れ様でした！ 🎉")
+if name != '選択してください':
+    # --- セッション初期化 ---
+    if "form_count" not in st.session_state:
         st.session_state.form_count = 1
+    
+    # --- 入力フォーム定義 ---
+    def create_input_fields(index):
+        st.markdown(f"---\n### 作業 {index}")
+    
+        customer = st.selectbox(
+            f'メーカー{index}',
+            ('選択してください', 'ジーテクト', 'ヨロズ', '城山', 'タチバナ', '浜岳', '三池', '東プレ', '千代田', '武部', 'インフェック','東海鉄工所','雑務','その他メーカー'),
+            key=f'customer_{index}'
+        )
+    
+        new_customer = ''
+        if customer == 'その他メーカー':
+            new_customer = st.text_input(f'メーカー名を入力{index}', key=f'new_customer_{index}', placeholder="メーカー名を入力")
+    
+          # 👇 作業内容の選択肢：雑務以外なら表示
+        if customer not in ('選択してください', '雑務'):
+            genre = st.selectbox(
+                f'作業内容{index}',
+                ('選択してください', '新規', '改修', 'その他'),
+                key=f'genre_{index}'
+            )
+        else:
+            genre = ''  # 雑務なら作業内容は空欄
+    
+        number = st.text_input(f'工番を入力{index}', key=f'number_{index}', placeholder="例: 51A111").upper() if genre != '選択してください' else ''
+    
+        # --- 時間入力（プレースホルダ付きテキスト） ---
+        time_input = st.text_input(f'時間を入力{index}', key=f'time_{index}', placeholder="例: 1.5")
+        try:
+            time = float(time_input) if time_input.strip() != "" else 0.0
+        except ValueError:
+            st.warning(f"時間{index}は数値で入力してください")
+            time = 0.0
+    
+        return {
+            "customer": customer,
+            "new_customer": new_customer,
+            "genre": genre,
+            "number": number,
+            "time": time
+        }
+    
+    # --- 入力フォームの表示 ---
+    inputs = []
+    for i in range(1, st.session_state.form_count + 1):
+        inputs.append(create_input_fields(i))
+    
+    # --- 「次へ」ボタン（最大10件） ---
+    if st.session_state.form_count < 10:
+        if st.button("次へ"):
+            st.session_state.form_count += 1
+            st.rerun()  # ✅ 即時再描画で次のフォームを表示！
+    
+    # --- 有効データ抽出 ---
+    valid_inputs = []
+    total_time = 0.0
+    
+    for inp in inputs:
+        if (
+            inp["customer"] != "選択してください"
+            and inp["genre"] != "選択してください"
+            and inp["number"] != ''
+            and inp["time"] > 0
+        ):
+            total_time += inp["time"]
+            valid_inputs.append(inp)
+    
+    # --- 合計時間表示 ---
+    if total_time > 0:
+        st.markdown(f"### ✅ 合計時間: {total_time:.2f} 時間")
+    
+    # --- 送信ボタン（有効データがある時だけ表示） ---
+    if valid_inputs:
+        if st.button("送信"):
+            rows_to_append = []
+            for inp in valid_inputs:
+                row = [
+                    str(day),
+                    name,
+                    inp["new_customer"] if inp["customer"] == "その他メーカー" else inp["customer"],
+                    "" if inp["customer"] == "雑務" else inp["genre"],  # 👈 作業内容を空白に
+                    inp["number"],
+                    inp["time"]
+                ]
+                rows_to_append.append(row)
+    
+            # ✅ 現在のシート行数を取得
+            current_rows = len(sheet.get_all_values())
+    
+            # ✅ 一括送信
+            sheet.append_rows(rows_to_append)
+    
+            # ✅ 送信した最初の行番号（1オリジン）
+            start_row = current_rows + 1
+            end_row = start_row + len(rows_to_append) - 1
+    
+            # ✅ 同じ日付＋名前の最後の行にだけ total_time を入れる
+            for i in range(len(rows_to_append)):
+                if i == len(rows_to_append) - 1:  # 最後の行だけ
+                    sheet.update_cell(start_row + i, 7, f"合計 {total_time:.2f} 時間")
+    
+            st.success("作業内容を送信しました。お疲れ様でした！ 🎉")
+            st.session_state.form_count = 1
+    
+    ##### プログラムエンド #####
 
-##### プログラムエンド #####
