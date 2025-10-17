@@ -1,0 +1,6 @@
+[server]
+fileWatcherType = "none"   # ファイル監視OFF → FD枯渇を防ぐ
+headless = true
+
+[client]
+toolbarMode = "auto"
