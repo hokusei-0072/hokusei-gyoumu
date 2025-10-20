@@ -30,13 +30,13 @@ service_account_info = {
 # ✅ キャッシュ付きシート取得関数
 @st.cache_resource
 def get_sheet():
-# 置き換え後（scopesは用途に合わせて）
-scopes = [
-    "https://www.googleapis.com/auth/spreadsheets",
-    "https://www.googleapis.com/auth/drive.readonly",
-]
-creds = Credentials.from_service_account_info(st.secrets["google_cloud"], scopes=scopes)
-gc = gspread.authorize(creds)
+    # 置き換え後（scopesは用途に合わせて）
+    scopes = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive.readonly",
+    ]
+    creds = Credentials.from_service_account_info(st.secrets["google_cloud"], scopes=scopes)
+    gc = gspread.authorize(creds)
 
     spreadsheet_id = "1OHkocLV4MiYFgim2fARSSQzSrQcW3njvnnnhgkMm-l4"
     return gc.open_by_key(spreadsheet_id).sheet1
