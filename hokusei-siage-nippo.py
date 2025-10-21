@@ -1,72 +1,59 @@
 # hokusei-siage-nippo.py
-# 2025/10/15 協豊追加 / 起動ハング対策＋スマホ入力改善（時間は空欄＋寛容パース＋チップ）
+# 2025/10/15 協豊追加 / 起動ハング対策＋スマホ入力改善（時間は空欄＋寛容パース／チップ無し）
 
 import socket
-socket.setdefaulttimeout(10)  # 外部I/Oの無限待ちを根絶
+socket.setdefaulttimeout(10)
 
-import re, unicodedata  # ← 追加（寛容パース用）
+import re, unicodedata
 import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
 from datetime import date
 
-# =========================
-# ユーティリティ（時間の寛容パース）
-# =========================
+# === ユーティリティ（時間の寛容パース） ===
 def parse_hours_maybe(s: str) -> float:
-    """全角/読点/単位混じりでも数値にして返す。なければ0.0"""
     if not s:
         return 0.0
-    s = unicodedata.normalize("NFKC", s)  # 全角→半角
+    s = unicodedata.normalize("NFKC", s)
     s = s.replace("，", ".").replace("、", ".").replace("．", ".")
-    s = re.sub(r"(時間|h|ｈ)", "", s, flags=re.IGNORECASE)  # 単位を除去
-    m = re.search(r"(\d+(?:\.\d+)?)", s)                   # 最初の数値を拾う
+    s = re.sub(r"(時間|h|ｈ)", "", s, flags=re.IGNORECASE)
+    m = re.search(r"(\d+(?:\.\d+)?)", s)
     return float(m.group(1)) if m else 0.0
 
-# =========================
-# 認証まわり
-# =========================
+# === 認証 ===
 GOOGLE_SHEET_ID = "1MXSg8qP_eT7lVczYpNB66sZGZP2NlWHIGz9jAWKH7Ss"
-SHEET_NAME = None  # None=sheet1 を使用。指定するなら "main" など。
+SHEET_NAME = None
 
 def _normalized_service_account_info():
     info = dict(st.secrets["google_cloud"])
-    # 改行が消えていた場合の救済
     if "private_key" in info and "\\n" in info["private_key"]:
         info["private_key"] = info["private_key"].replace("\\n", "\n")
     return info
 
 @st.cache_resource(show_spinner=False)
 def get_sheet():
-    """遅延接続 & 共有: アプリ全体で1回だけ接続し、再利用"""
-    service_account_info = _normalized_service_account_info()
     scopes = [
         "https://www.googleapis.com/auth/spreadsheets",
         "https://www.googleapis.com/auth/drive.readonly",
     ]
-    creds = Credentials.from_service_account_info(service_account_info, scopes=scopes)
+    creds = Credentials.from_service_account_info(_normalized_service_account_info(), scopes=scopes)
     gc = gspread.authorize(creds)
     sh = gc.open_by_key(GOOGLE_SHEET_ID)
     return sh.worksheet(SHEET_NAME) if SHEET_NAME else sh.sheet1
 
-
-# =========================
-# UI
-# =========================
+# === UI ===
 st.title('北青 仕上げ課 作業日報')
 st.caption("メーカー名、工番、作業内容、時間を入力してください。")
 
-# リリースノート
 with st.expander("リリースノート（2025/10/15更新）", expanded=False):
     st.markdown(
         "- メーカー名に **協豊** を追加\n"
-        "- 一度に送信できる作業を **10件** までに増加\n"
+        "- 一度に送信できる作業を **10件** に増加\n"
         "- メーカーに **東海鉄工所** を追加\n"
         "- 起動ハング対策（外部接続の遅延実行・タイムアウト）\n"
-        "- **スマホ入力改善：時間は空欄スタート＋全角/単位OK＋クイックチップ**"
+        "- **スマホ入力改善：時間は空欄スタート＋全角/単位OK**"
     )
 
-# 説明文
 st.text(
     "●パネル取りやトライで複数工番を同時に作業した場合は、作業内容「パネル」「トライ」を選択し、\n"
     "  １工程目の工番(ブランクやドローの工番)を入力してください。"
@@ -88,11 +75,9 @@ name = st.selectbox(
 )
 
 if name != '選択してください':
-    # --- セッション初期化 ---
     if "form_count" not in st.session_state:
         st.session_state.form_count = 1
 
-    # --- 入力フォーム定義 ---
     def create_input_fields(index: int):
         st.markdown(f"---\n### 作業 {index}")
 
@@ -111,7 +96,6 @@ if name != '選択してください':
                 placeholder="メーカー名を入力"
             )
 
-        # 作業内容（雑務は空欄）
         if customer not in ('選択してください', '雑務'):
             genre = st.selectbox(
                 f'作業内容{index}',
@@ -121,30 +105,19 @@ if name != '選択してください':
         else:
             genre = ''  # 雑務なら空欄
 
-        # 工番（「作業内容が選択してください」の間は入力させない）
         number = (
             st.text_input(f'工番を入力{index}', key=f'number_{index}', placeholder="例: 51A111")
             .upper()
             if genre != '選択してください' else ''
         )
 
-        # === 時間（初期値は空欄／テキスト入力＋寛容パース＋クイックチップ） ===
+        # 時間：空欄スタート（テキスト＋寛容パース）
         time_key = f'time_{index}'
         time_text = st.text_input(
             f'時間を入力{index}',
             key=time_key,
             placeholder="例: 1.5（１．５ / 1,5 / 1.5h / 1.5時間 もOK）"
         )
-
-        # クイックチップ（タップでセット）
-        c1, c2, c3, c4, c5, c6 = st.columns(6)
-        for col, val in zip((c1, c2, c3, c4, c5, c6), (0.25, 0.5, 1.0, 1.5, 2.0, 3.0)):
-            with col:
-                # ボタンキーはユニークに
-                if st.button(f"{val}", key=f"chip_{index}_{str(val).replace('.','_')}"):
-                    st.session_state[time_key] = str(val)
-                    st.rerun()
-
         hours = parse_hours_maybe(time_text)
         if time_text and hours == 0.0:
             st.info(f"時間{index}は数値で入力してください（1.5 / １．５ / 1,5 / 1.5h などOK）")
@@ -157,17 +130,12 @@ if name != '選択してください':
             "time": hours
         }
 
-    # --- 入力フォームの表示 ---
     inputs = [create_input_fields(i) for i in range(1, st.session_state.form_count + 1)]
 
-    # --- 「次へ」ボタン（最大10件） ---
-    cols_next = st.columns([1, 1, 6])
-    with cols_next[0]:
-        if st.session_state.form_count < 10 and st.button("次へ"):
-            st.session_state.form_count += 1
-            st.rerun()  # すぐに次のフォームを描画
+    if st.session_state.form_count < 10 and st.button("次へ"):
+        st.session_state.form_count += 1
+        st.rerun()
 
-    # --- 有効データ抽出 ---
     valid_inputs = []
     total_time = 0.0
     for inp in inputs:
@@ -180,45 +148,38 @@ if name != '選択してください':
             total_time += inp["time"]
             valid_inputs.append(inp)
 
-    # --- 合計時間表示 ---
     if total_time > 0:
         st.markdown(f"### ✅ 合計時間: {total_time:.2f} 時間")
 
-    # --- 送信ボタン ---
-    if valid_inputs:
-        if st.button("送信"):
-            try:
-                sheet = get_sheet()  # ここで初めて接続（遅延実行）
+    if valid_inputs and st.button("送信"):
+        try:
+            sheet = get_sheet()
+            rows_to_append = []
+            for idx, inp in enumerate(valid_inputs, start=1):
+                is_last = (idx == len(valid_inputs))
+                row = [
+                    str(day),
+                    name,
+                    inp["new_customer"] if inp["customer"] == "その他メーカー" else inp["customer"],
+                    "" if inp["customer"] == "雑務" else inp["genre"],
+                    inp["number"],
+                    inp["time"],
+                    f"合計 {total_time:.2f} 時間" if is_last else ""
+                ]
+                rows_to_append.append(row)
 
-                rows_to_append = []
-                for idx, inp in enumerate(valid_inputs, start=1):
-                    is_last = (idx == len(valid_inputs))
-                    row = [
-                        str(day),
-                        name,
-                        inp["new_customer"] if inp["customer"] == "その他メーカー" else inp["customer"],
-                        "" if inp["customer"] == "雑務" else inp["genre"],  # 雑務は作業内容空欄
-                        inp["number"],
-                        inp["time"],
-                        f"合計 {total_time:.2f} 時間" if is_last else ""  # 7列目に合計（最後の行だけ）
-                    ]
-                    rows_to_append.append(row)
+            sheet.append_rows(rows_to_append, value_input_option="USER_ENTERED")
+            st.success("作業内容を送信しました。お疲れ様でした！ 🎉")
+            st.session_state.form_count = 1
 
-                sheet.append_rows(rows_to_append, value_input_option="USER_ENTERED")
-                st.success("作業内容を送信しました。お疲れ様でした！ 🎉")
-                st.session_state.form_count = 1
+        except Exception as e:
+            st.error(f"送信に失敗しました: {e}")
+            st.info(
+                "• Secrets の private_key の改行（\\n）が消えていないか\n"
+                "• ネットワーク疎通\n"
+                "• ライブラリのバージョン\n"
+                "を確認してください。"
+            )
 
-            except Exception as e:
-                st.error(f"送信に失敗しました: {e}")
-                st.info(
-                    "• Secrets の private_key の改行（\\n）が消えていないか\n"
-                    "• ネットワーク疎通\n"
-                    "• ライブラリのバージョン\n"
-                    "を確認してください。"
-                )
-
-# =========================
-# 依存関係メモ（任意）
-# =========================
+# 依存関係メモ：
 # pip install streamlit gspread google-auth
-# （pandas等は本画面では未使用。必要なら追加）
