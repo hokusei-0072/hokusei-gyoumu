@@ -1,13 +1,27 @@
 # hokusei-siage-nippo.py
-# 2025/10/15 協豊追加 / 起動ハング対策版（A案：時間をnumber_inputに変更）
+# 2025/10/15 協豊追加 / 起動ハング対策＋スマホ入力改善（時間は空欄＋寛容パース＋チップ）
 
 import socket
 socket.setdefaulttimeout(10)  # 外部I/Oの無限待ちを根絶
 
+import re, unicodedata  # ← 追加（寛容パース用）
 import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
 from datetime import date
+
+# =========================
+# ユーティリティ（時間の寛容パース）
+# =========================
+def parse_hours_maybe(s: str) -> float:
+    """全角/読点/単位混じりでも数値にして返す。なければ0.0"""
+    if not s:
+        return 0.0
+    s = unicodedata.normalize("NFKC", s)  # 全角→半角
+    s = s.replace("，", ".").replace("、", ".").replace("．", ".")
+    s = re.sub(r"(時間|h|ｈ)", "", s, flags=re.IGNORECASE)  # 単位を除去
+    m = re.search(r"(\d+(?:\.\d+)?)", s)                   # 最初の数値を拾う
+    return float(m.group(1)) if m else 0.0
 
 # =========================
 # 認証まわり
@@ -49,7 +63,7 @@ with st.expander("リリースノート（2025/10/15更新）", expanded=False):
         "- 一度に送信できる作業を **10件** までに増加\n"
         "- メーカーに **東海鉄工所** を追加\n"
         "- 起動ハング対策（外部接続の遅延実行・タイムアウト）\n"
-        "- **スマホ入力安定化：時間を number_input に変更**"
+        "- **スマホ入力改善：時間は空欄スタート＋全角/単位OK＋クイックチップ**"
     )
 
 # 説明文
@@ -114,14 +128,26 @@ if name != '選択してください':
             if genre != '選択してください' else ''
         )
 
-        # === 時間（A案：number_inputでスマホでも数値保証） ===
-        hours = st.number_input(
+        # === 時間（初期値は空欄／テキスト入力＋寛容パース＋クイックチップ） ===
+        time_key = f'time_{index}'
+        time_text = st.text_input(
             f'時間を入力{index}',
-            key=f'time_{index}',
-            min_value=0.0,
-            step=0.25,     # 必要に応じて 0.1 / 0.5 などに変更可
-            format="%.2f"
+            key=time_key,
+            placeholder="例: 1.5（１．５ / 1,5 / 1.5h / 1.5時間 もOK）"
         )
+
+        # クイックチップ（タップでセット）
+        c1, c2, c3, c4, c5, c6 = st.columns(6)
+        for col, val in zip((c1, c2, c3, c4, c5, c6), (0.25, 0.5, 1.0, 1.5, 2.0, 3.0)):
+            with col:
+                # ボタンキーはユニークに
+                if st.button(f"{val}", key=f"chip_{index}_{str(val).replace('.','_')}"):
+                    st.session_state[time_key] = str(val)
+                    st.rerun()
+
+        hours = parse_hours_maybe(time_text)
+        if time_text and hours == 0.0:
+            st.info(f"時間{index}は数値で入力してください（1.5 / １．５ / 1,5 / 1.5h などOK）")
 
         return {
             "customer": customer,
