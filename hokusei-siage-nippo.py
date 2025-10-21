@@ -1,5 +1,5 @@
 # hokusei-siage-nippo.py
-# 2025/10/15 協豊追加 / 起動ハング対策版
+# 2025/10/15 協豊追加 / 起動ハング対策版（A案：時間をnumber_inputに変更）
 
 import socket
 socket.setdefaulttimeout(10)  # 外部I/Oの無限待ちを根絶
@@ -12,23 +12,6 @@ from datetime import date
 # =========================
 # 認証まわり
 # =========================
-# st.secrets["google_cloud"] はサービスアカウントJSONをそのまま入れてください
-# 例）.streamlit/secrets.toml:
-# [google_cloud]
-# type = "service_account"
-# project_id = "..."
-# private_key_id = "..."
-# private_key = "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
-# client_email = "..."
-# client_id = "..."
-# auth_uri = "https://accounts.google.com/o/oauth2/auth"
-# token_uri = "https://oauth2.googleapis.com/token"
-# auth_provider_x509_cert_url = "https://www.googleapis.com/oauth2/v1/certs"
-# client_x509_cert_url = "..."
-# universe_domain = "googleapis.com"
-#
-# ※ private_key の改行は \n を含む文字列で格納（よく消えます）
-
 GOOGLE_SHEET_ID = "1MXSg8qP_eT7lVczYpNB66sZGZP2NlWHIGz9jAWKH7Ss"
 SHEET_NAME = None  # None=sheet1 を使用。指定するなら "main" など。
 
@@ -65,7 +48,8 @@ with st.expander("リリースノート（2025/10/15更新）", expanded=False):
         "- メーカー名に **協豊** を追加\n"
         "- 一度に送信できる作業を **10件** までに増加\n"
         "- メーカーに **東海鉄工所** を追加\n"
-        "- 起動ハング対策（外部接続の遅延実行・タイムアウト）"
+        "- 起動ハング対策（外部接続の遅延実行・タイムアウト）\n"
+        "- **スマホ入力安定化：時間を number_input に変更**"
     )
 
 # 説明文
@@ -130,13 +114,14 @@ if name != '選択してください':
             if genre != '選択してください' else ''
         )
 
-        # 時間
-        time_input = st.text_input(f'時間を入力{index}', key=f'time_{index}', placeholder="例: 1.5")
-        try:
-            hours = float(time_input) if time_input.strip() != "" else 0.0
-        except ValueError:
-            st.warning(f"時間{index}は数値で入力してください")
-            hours = 0.0
+        # === 時間（A案：number_inputでスマホでも数値保証） ===
+        hours = st.number_input(
+            f'時間を入力{index}',
+            key=f'time_{index}',
+            min_value=0.0,
+            step=0.25,     # 必要に応じて 0.1 / 0.5 などに変更可
+            format="%.2f"
+        )
 
         return {
             "customer": customer,
