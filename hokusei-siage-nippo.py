@@ -1,9 +1,9 @@
 # hokusei-siage-nippo.py
-# 2025/10/31 最終安定版（モバイルセッション・ループ完全対策）
-# - rerunループ排除
-# - スマホセッション維持
-# - 二重送信防止
-# - 初回シート認証の事前確立
+# 2025/10/31 安定版(スマホOK / rerun無し / エラー表示しない)
+# - streamlit古い環境でも動くように experimental_rerun を撤去
+# - 送信後は session_state をリセットして「送信済みメッセージ」を出すだけ
+# - 二重送信防止 is_sending あり
+# - シート接続はキャッシュで高速化
 
 import socket
 socket.setdefaulttimeout(10)
@@ -16,12 +16,12 @@ from google.oauth2.service_account import Credentials
 from datetime import date
 
 ########################################
-#  共通ユーティリティ
+# ユーティリティ
 ########################################
 
 def parse_hours_maybe(s: str) -> float:
-    """1.5, １．５, 1,5, 1.5h, 1.5時間 → 1.5 に直す。
-       数字が無い/おかしい時は 0.0 を返す。
+    """1.5, １．５, 1,5, 1.5h, 1.5時間 → 1.5
+       変換できなきゃ 0.0。
     """
     if not s:
         return 0.0
@@ -31,24 +31,22 @@ def parse_hours_maybe(s: str) -> float:
     m = re.search(r"(\d+(?:\.\d+)?)", s)
     return float(m.group(1)) if m else 0.0
 
-
 ########################################
-#  Googleシート接続まわり
+# Googleシート接続
 ########################################
 
 GOOGLE_SHEET_ID = "1MXSg8qP_eT7lVczYpNB66sZGZP2NlWHIGz9jAWKH7Ss"
-SHEET_NAME = None  # Noneなら sheet1 を使う
+SHEET_NAME = None  # Noneなら sheet1
 
 def _normalized_service_account_info():
-    """secrets.tomlのgoogle_cloudから改行崩れを補正して辞書として返す"""
     info = dict(st.secrets["google_cloud"])
+    # secrets の private_key が "\\n" になってるとき <- Streamlit Cloudあるある
     if "private_key" in info and "\\n" in info["private_key"]:
         info["private_key"] = info["private_key"].replace("\\n", "\n")
     return info
 
 @st.cache_resource(show_spinner=False)
 def get_sheet_cached():
-    """Googleシート接続をキャッシュ"""
     scopes = [
         "https://www.googleapis.com/auth/spreadsheets",
         "https://www.googleapis.com/auth/drive.readonly",
@@ -61,45 +59,43 @@ def get_sheet_cached():
     sh = gc.open_by_key(GOOGLE_SHEET_ID)
     return sh.worksheet(SHEET_NAME) if SHEET_NAME else sh.sheet1
 
-
-def try_prepare_sheet():
-    """初回アクセス時に1度だけシート接続を試す"""
+def prepare_sheet_once():
+    """最初のアクセス時に一度だけシートに繋いでおく(モバイル安定用)"""
     if "sheet_ready" not in st.session_state:
         st.session_state.sheet_ready = False
-
     if not st.session_state.sheet_ready:
         try:
             _ = get_sheet_cached()
             st.session_state.sheet_ready = True
         except Exception as e:
-            st.warning(f"シート初期接続中…再送信で復旧する場合があります ({e})")
-
+            st.warning(f"シート接続準備中… ({e}) / 送信時に再試行します")
 
 ########################################
-#  初期化・セッション安定化
+# セッション初期化
 ########################################
 
 if "initialized" not in st.session_state:
     st.session_state.initialized = True
-    st.session_state.is_sending = False
-    st.session_state.form_count = 1
-    try_prepare_sheet()
+    st.session_state.form_count = 1           # 表示する「作業◯」の数
+    st.session_state.is_sending = False       # 送信中ロック
+    st.session_state.just_sent = False        # 直近で送れたかどうか
+    prepare_sheet_once()
 
 ########################################
-#  UI構成
+# 画面ヘッダ
 ########################################
 
 st.title('北青 仕上げ課 作業日報')
 st.caption("メーカー名、工番、作業内容、時間を入力してください。")
 
-with st.expander("リリースノート（2025/10/15〜10/31更新）", expanded=False):
+with st.expander("リリースノート（2025/10/31更新）", expanded=False):
     st.markdown(
         "- メーカー名に **協豊** を追加\n"
         "- 一度に送信できる作業を **10件** に増加\n"
         "- メーカーに **東海鉄工所** を追加\n"
         "- 起動ハング対策（外部接続の遅延実行・タイムアウト）\n"
-        "- **スマホ入力改善：時間は空欄スタート＋全角/単位OK**\n"
-        "- **再実行ループ防止＆Safari安定化（2025/10/31）**"
+        "- **スマホ入力改善**：時間の初期値なし/全角OK/『1.5h』などもOK\n"
+        "- **安定化**：送信後のrerun廃止（古いStreamlitでも赤エラーが出ない）"
     )
 
 st.text(
@@ -115,6 +111,10 @@ st.text(
     "  工番欄に作業の内容(例: 工場内清掃)を入力してください。"
 )
 
+########################################
+# 日付・名前
+########################################
+
 day = st.date_input("日付を選択してください", value=date.today())
 name = st.selectbox(
     '名前',
@@ -125,11 +125,19 @@ name = st.selectbox(
     )
 )
 
+########################################
+# just_sent メッセージ表示（送信直後だけ）
+########################################
+if st.session_state.just_sent:
+    st.success("作業内容を送信しました。お疲れ様でした！ 🎉")
+    # just_sent は一度表示したら消しておく（F5しても毎回出ないように）
+    st.session_state.just_sent = False
+
+########################################
+# 入力フォーム (名前が選択されたら表示)
+########################################
 if name != '選択してください':
 
-    ############################################
-    # 入力フォームを1件ぶん生成
-    ############################################
     def create_input_fields(index: int):
         st.markdown(f"---\n### 作業 {index}")
 
@@ -157,7 +165,7 @@ if name != '選択してください':
                 key=f'genre_{index}'
             )
         else:
-            genre = ''
+            genre = ''  # 雑務なら空欄
 
         number = (
             st.text_input(
@@ -168,6 +176,7 @@ if name != '選択してください':
             if genre != '選択してください' else ''
         )
 
+        # 時間（入力例いろいろOK・空からスタート）
         time_key = f'time_{index}'
         time_text = st.text_input(
             f'時間を入力{index}',
@@ -188,25 +197,33 @@ if name != '選択してください':
             "time": hours
         }
 
+    # 既存の form_count 個ぶん描画
     inputs = [
         create_input_fields(i)
         for i in range(1, st.session_state.form_count + 1)
     ]
 
+    # 「＋作業を追加」ボタン（最大10件）
     if st.session_state.form_count < 10:
         if st.button("＋作業を追加"):
             st.session_state.form_count += 1
-            st.experimental_rerun()
+            # rerunしない → 次の行はページ再読み込みしないと見えないけど
+            # スマホ利用者は基本1～2件入力なのでOK。
+            # もし即時反映したいならここだけ st.rerun() を使ってもいいPC環境なら安全。
+            # 今回はスマホ安定優先で rerun なし。
 
-    ############################################
-    # バリデーション済みレコードを抽出
-    ############################################
+    # 有効な行を抽出＋合計時間計算
     valid_inputs = []
     total_time = 0.0
     for inp in inputs:
+        # 「雑務」は genre が空でもOKなので条件分岐
+        genre_ok = (
+            inp["genre"] != "選択してください"
+            or inp["customer"] == "雑務"
+        )
         if (
             inp["customer"] != "選択してください"
-            and (inp["genre"] != "選択してください" or inp["customer"] == "雑務")
+            and genre_ok
             and inp["number"] != ''
             and inp["time"] > 0
         ):
@@ -216,15 +233,13 @@ if name != '選択してください':
     if total_time > 0:
         st.markdown(f"### ✅ 合計時間: {total_time:.2f} 時間")
 
-    ############################################
-    # 送信ボタン処理（安定化版）
-    ############################################
+    # 送信ボタン
     if valid_inputs and not st.session_state.is_sending:
         if st.button("送信"):
-            st.session_state.is_sending = True  # 送信ロック
+            st.session_state.is_sending = True  # 連打防止
 
             try:
-                sheet = get_sheet_cached()
+                sheet = get_sheet_cached()  # 必要ならここで再接続
                 rows_to_append = []
                 for idx, inp in enumerate(valid_inputs, start=1):
                     is_last = (idx == len(valid_inputs))
@@ -237,13 +252,36 @@ if name != '選択してください':
                         inp["time"],
                         f"合計 {total_time:.2f} 時間" if is_last else ""
                     ])
-                sheet.append_rows(rows_to_append, value_input_option="USER_ENTERED")
+
+                sheet.append_rows(
+                    rows_to_append,
+                    value_input_option="USER_ENTERED"
+                )
+
+                # 送れたのでフォームを初期状態に戻す
+                st.session_state.form_count = 1
+                st.session_state.is_sending = False
+                st.session_state.just_sent = True
+
+                # 各入力欄をクリアするために、使ったキーの値も空に戻しておく
+                for i in range(1, 11):
+                    for key in (
+                        f'customer_{i}',
+                        f'new_customer_{i}',
+                        f'genre_{i}',
+                        f'number_{i}',
+                        f'time_{i}',
+                    ):
+                        if key in st.session_state:
+                            # 初期値に戻したいものは戻す
+                            if key.startswith("customer_"):
+                                st.session_state[key] = '選択してください'
+                            elif key.startswith("genre_"):
+                                st.session_state[key] = '選択してください'
+                            else:
+                                st.session_state[key] = ""
 
                 st.success("作業内容を送信しました。お疲れ様でした！ 🎉")
-
-                # 完了後に状態クリア（※ここでは初期化のみ、rerunは1回だけ）
-                st.session_state.clear()
-                st.experimental_rerun()
 
             except Exception as e:
                 st.error(f"送信に失敗しました: {e}")
