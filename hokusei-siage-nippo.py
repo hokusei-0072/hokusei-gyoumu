@@ -291,24 +291,24 @@ if name != '選択してください':
             if work_time_txt and work_hours_raw == 0.0:
                 st.info(f"時間{i}は数値で入力してください（例: 4.75 / ４．７５）")
 
-            # 同行者（客先トライ & 作業1のみ）
-            if genre == '客先トライ' and i == 1:
+            # 同行者（客先トライ：作業番号に関係なく入力OK）
+            if genre == "客先トライ":
                 companion_sel = st.selectbox(
-                    "同行者",
+                    f"同行者（作業{i}）",
                     ["同行者なし"] + [str(n) for n in range(1, 11)],
-                    key="companion_count_1"
+                    key=f"companion_count_{i}"
                 )
                 if companion_sel != "同行者なし":
                     companion_count = int(companion_sel)
                     for j in range(1, companion_count + 1):
                         cn = st.selectbox(
-                            f"同行者の名前{j}",
+                            f"同行者の名前{j}（作業{i}）",
                             (
-                                '選択してください',
-                                '吉田', "中村", "渡辺", "福田", "苫米地", "矢部", "小野",
-                                "塩入",  "トム", "ユン", "ティエン", "チョン", "アイン"
+                                "選択してください",
+                                "吉田", "中村", "渡辺", "福田", "苫米地", "矢部", "小野",
+                                "塩入", "トム", "ユン", "ティエン", "チョン", "アイン"
                             ),
-                            key=f"companion_name_1_{j}"
+                            key=f"companion_name_{i}_{j}"
                         )
                         companion_names.append(cn)
 
@@ -407,8 +407,8 @@ if name != '選択してください':
             if steps < 1 or not all(job_numbers) or work_q <= 0:
                 continue
 
-            # 同行者（作業1の客先トライのみ）：名前が未選択なら送信不可
-            if inp["i"] == 1 and inp["genre"] == "客先トライ" and inp["companion_names"]:
+            # 同行者（客先トライ：作業番号に関係なく）：名前が未選択なら送信不可
+            if inp["genre"] == "客先トライ" and inp["companion_names"]:
                 if any(nm == "選択してください" for nm in inp["companion_names"]):
                     continue
 
@@ -491,17 +491,20 @@ if name != '選択してください':
                 if rows_main:
                     rows_main[-1][6] = f"合計 {total_time:.2f} 時間"
 
-                # 同行者分（作業1の客先トライ入力だけを複製して送信）
+                # 同行者分（同行者が入力された「客先トライ」作業ごとに複製して送信）
                 rows_companions: list[list[str]] = []
-                inp1 = next((x for x in valid_inputs if x.get("i") == 1 and x.get("genre") == "客先トライ"), None)
-                if inp1 and inp1.get("companion_names"):
-                    cust_cell1 = inp1["new_customer"] if inp1["customer"] == "その他メーカー" else inp1["customer"]
 
-                    # 同行者の合計は「作業1の客先トライ分だけ」（作業追加ぶんは含めない）
-                    comp_total = float(inp1.get("task_total", 0.0))
+                for src in valid_inputs:
+                    if not (src.get("genre") == "客先トライ" and src.get("companion_names")):
+                        continue
+
+                    cust_cell_src = src["new_customer"] if src["customer"] == "その他メーカー" else src["customer"]
+
+                    # 同行者の合計は「その作業の客先トライ分だけ」（他作業は含めない）
+                    comp_total = float(src.get("task_total", 0.0))
                     comp_total_text = f"合計 {comp_total:.2f} 時間"
 
-                    for comp_name in inp1["companion_names"]:
+                    for comp_name in src["companion_names"]:
                         # 「移動」行
                         rows_companions.append([
                             str(day),
@@ -509,17 +512,17 @@ if name != '選択してください':
                             "雑務",
                             "",
                             "移動",
-                            fmt_hours(max(0.0, inp1["move_hours"])),
+                            fmt_hours(max(0.0, src["move_hours"])),
                             ""
                         ])
 
                         # 工番配分行（最後の工番行の位置を覚える）
                         last_job_row_idx = None
-                        for jb, hh in zip(inp1["job_numbers"][:inp1["steps"]], inp1["alloc_hours"]):
+                        for jb, hh in zip(src["job_numbers"][:src["steps"]], src["alloc_hours"]):
                             rows_companions.append([
                                 str(day),
                                 comp_name,
-                                cust_cell1,
+                                cust_cell_src,
                                 "客先トライ",
                                 jb,
                                 fmt_hours(hh),
@@ -527,7 +530,7 @@ if name != '選択してください':
                             ])
                             last_job_row_idx = len(rows_companions) - 1
 
-                        # 同行者ごとの「合計」は“工番配分の最後の行”に固定（本人と同じ配置）
+                        # 同行者ごとの「合計」は“工番配分の最後の行”に固定
                         if last_job_row_idx is not None:
                             rows_companions[last_job_row_idx][6] = comp_total_text
 
@@ -594,13 +597,15 @@ if name != '選択してください':
                     if ak in st.session_state:
                         del st.session_state[ak]
 
-                # 同行者（作業1）
-                if "companion_count_1" in st.session_state:
-                    st.session_state["companion_count_1"] = "同行者なし"
-                for j in range(1, 11):
-                    k = f"companion_name_1_{j}"
-                    if k in st.session_state:
-                        st.session_state[k] = "選択してください"
+                # 同行者（作業1〜10）
+                for i in range(1, 11):
+                    ck = f"companion_count_{i}"
+                    if ck in st.session_state:
+                        st.session_state[ck] = "同行者なし"
+                    for j in range(1, 11):
+                        nk = f"companion_name_{i}_{j}"
+                        if nk in st.session_state:
+                            st.session_state[nk] = "選択してください"
 
             except Exception:
                 # ここは握りつぶす。送信自体はもう終わってるので
