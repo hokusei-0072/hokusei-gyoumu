@@ -28,6 +28,41 @@ def parse_hours_maybe(s: str) -> float:
     m = re.search(r"(\d+(?:\.\d+)?)", s)
     return float(m.group(1)) if m else 0.0
 
+def quantize_quarter(x: float) -> float:
+    """0.25単位に丸める（例: 1.12 → 1.0 / 1.13 → 1.25）"""
+    return round(x * 4) / 4.0
+
+def split_hours_quarter(total_hours: float, count: int) -> list[float]:
+    """合計時間を count 個に 0.25単位で配分（余りは先頭に寄せる）"""
+    if count <= 0:
+        return []
+    total_q = quantize_quarter(total_hours)
+    # 0.25 を 1 unit として整数配分（float誤差を避ける）
+    units = int(round(total_q * 4))
+    per = units // count
+    rem = units % count
+    out_units = [per + rem] + [per] * (count - 1)
+    return [u / 4.0 for u in out_units]
+
+def fmt_hours(x: float) -> str:
+    """スプレッドシート送信用の表示（0.75 / 1.5 のように余計な0を落とす）"""
+    s = f"{x:.2f}"
+    s = s.rstrip("0").rstrip(".")
+    return s
+
+def make_job_sequence(job1: str, count: int) -> list[str] | None:
+    """工番1から連番を作る。末尾3桁を繰り上げ（例: 12A345 → 12A346 ...）"""
+    if count <= 0:
+        return []
+    base = (job1 or "").strip().upper()
+    if not base:
+        return None
+    m = re.match(r"^(.+?)(\d{3})$", base)
+    if not m:
+        return None
+    prefix = m.group(1)
+    start = int(m.group(2))
+    return [f"{prefix}{start + k:03d}" for k in range(count)]
 ########################################
 # Googleシート接続
 ########################################
@@ -97,12 +132,13 @@ with st.expander("リリースノート（2025/10/31更新）", expanded=False):
     )
 
 st.text(
-    "●パネル取りやトライで複数工番を同時に作業した場合は、作業内容「パネル」「トライ」を選択し、\n"
-    "  １工程目の工番(ブランクやドローの工番)を入力してください。"
+    "●『パネル』『社内トライ』『客先トライ』で複数工番を同時に作業した場合は、\n"
+    "  作業内容を選ぶと専用フォームが表示されます（工程数・工番・時間を入力）。\n"
+    "  ※『客先トライ』は移動時間と同行者も入力できます。"
 )
 st.text(
     "●複数の工番をまとめて(例 51A001～51A005)入力すると集計に不具合が出るので、\n"
-    "  １工程ずつ日報を入力してください。"
+    "  専用フォームの『工程数』で工番を分割して入力してください。"
 )
 st.text(
     "●工番に関わる仕事以外の場合はメーカー名で「雑務」を選択し、\n"
@@ -119,7 +155,7 @@ name = st.selectbox(
     (
         '選択してください',
         '吉田', "中村", "渡辺", "福田", "苫米地", "矢部", "小野",
-        "塩入", "篠崎", "トム", "ユン", "ティエン", "チョン", "アイン", "ナム"
+        "塩入", "トム", "ユン", "ティエン", "チョン", "アイン"
     )
 )
 
@@ -140,9 +176,10 @@ if name != '選択してください':
         customer = st.selectbox(
             f"メーカー{i}",
             (
-                '選択してください', 'ジーテクト', 'ヨロズ', '城山', 'タチバナ',
-                '浜岳', '三池', '東プレ', '協豊', '千代田',
-                'アブクマ','武部鉄工', '雑務', 'その他メーカー'
+                "選択してください", "ジーテクト", "ヨロズ", "城山", "タチバナ", "浜岳",
+                "三池", "東プレ", "アブクマ", "町山製作所", "須永鉄工", "港プレス", "武部鉄工所", "東海鉄工所",
+                "インフェック",
+                "千代田", "エスケイ", "協豊", "海津", "タツム", "雑務", "その他メーカー"
             ),
             key=f"customer_{i}"
         )
@@ -159,39 +196,178 @@ if name != '選択してください':
         if customer not in ('選択してください', '雑務'):
             genre = st.selectbox(
                 f"作業内容{i}",
-                ('選択してください', '新規', '玉成', '設変', 'パネル', 'トライ', 'その他'),
+                ('選択してください', '新規', '玉成', '設変', 'パネル', '社内トライ', '客先トライ', 'その他'),
                 key=f"genre_{i}"
             )
         else:
             genre = ""
 
-        number = (
-            st.text_input(
+        # 入力欄を出して良い条件（メーカー選択済み＋作業内容選択済み / 雑務は作業内容なし）
+        ready = (
+                customer != '選択してください'
+                and (
+                        customer == '雑務'
+                        or (customer != '雑務' and genre != '選択してください')
+                )
+        )
+
+        special_genres = ('社内トライ', 'パネル', '客先トライ')
+        is_special = (genre in special_genres)
+
+        # ==============================
+        # 専用フォーム（社内トライ/パネル/客先トライ）
+        # ==============================
+        steps = 1
+        job_numbers: list[str] = []
+        work_time_txt = ""
+        work_hours_raw = 0.0
+        move_time_txt = ""
+        move_hours = 0.0
+        companion_count = 0
+        companion_names: list[str] = []
+
+        if ready and is_special:
+            # 客先トライのみ：移動時間
+            if genre == '客先トライ':
+                move_time_txt = st.text_input(
+                    f"移動時間{i}",
+                    key=f"move_time_{i}",
+                    placeholder="例: 1.0"
+                )
+                move_hours = parse_hours_maybe(move_time_txt)
+                if move_time_txt and move_hours == 0.0:
+                    st.info(f"移動時間{i}は数値で入力してください（例: 1 / 1.5 / １．５）")
+
+            # 工程数（整数）
+            steps = int(st.number_input(
+                f"工程数{i}",
+                min_value=1,
+                step=1,
+                value=1,
+                key=f"steps_{i}"
+            ))
+
+            # 工番：工程数ぶん表示（工番1の入力から連番自動入力）
+            job1_key = f"job_{i}_1"
+            job1_now = st.session_state.get(job1_key, "")
+            auto_jobs = make_job_sequence(job1_now, steps)
+
+            old_auto_jobs = st.session_state.get(f"auto_jobs_{i}")
+            if auto_jobs is not None:
+                for k in range(2, steps + 1):
+                    kkey = f"job_{i}_{k}"
+                    cur = st.session_state.get(kkey, "")
+                    old = None
+                    if isinstance(old_auto_jobs, list) and len(old_auto_jobs) >= k:
+                        old = old_auto_jobs[k - 1]
+                    # 空欄 or 前回の自動入力のままなら更新する（手入力で崩した場合は上書きしない）
+                    if cur == "" or (old is not None and cur == old):
+                        st.session_state[kkey] = auto_jobs[k - 1]
+                st.session_state[f"auto_jobs_{i}"] = auto_jobs
+
+            for k in range(1, steps + 1):
+                job = st.text_input(
+                    f"工番{k}",
+                    key=f"job_{i}_{k}",
+                    placeholder="例: 12A345" if k == 1 else ""
+                )
+                job_numbers.append(job.upper().strip())
+
+            if auto_jobs is None and job1_now:
+                st.info("工番1の末尾が3桁数字ではないため、工番2以降の連番自動入力ができません。")
+
+            # 作業時間（合計）
+            work_time_txt = st.text_input(
+                f"時間{i}",
+                key=f"work_time_{i}",
+                placeholder="例: 4.75"
+            )
+            work_hours_raw = parse_hours_maybe(work_time_txt)
+            if work_time_txt and work_hours_raw == 0.0:
+                st.info(f"時間{i}は数値で入力してください（例: 4.75 / ４．７５）")
+
+            # 同行者（客先トライ & 作業1のみ）
+            if genre == '客先トライ' and i == 1:
+                companion_sel = st.selectbox(
+                    "同行者",
+                    ["同行者なし"] + [str(n) for n in range(1, 11)],
+                    key="companion_count_1"
+                )
+                if companion_sel != "同行者なし":
+                    companion_count = int(companion_sel)
+                    for j in range(1, companion_count + 1):
+                        cn = st.selectbox(
+                            f"同行者の名前{j}",
+                            (
+                                '選択してください',
+                                '吉田', "中村", "渡辺", "福田", "苫米地", "矢部", "小野",
+                                "塩入",  "トム", "ユン", "ティエン", "チョン", "アイン"
+                            ),
+                            key=f"companion_name_1_{j}"
+                        )
+                        companion_names.append(cn)
+
+            # 「工番＋時間」確認表示（時間は0.25単位で配分）
+            st.markdown("#### 工番＋時間（確認）")
+            if steps >= 1 and all(job_numbers) and work_hours_raw > 0:
+                work_q = quantize_quarter(work_hours_raw)
+                if abs(work_q - work_hours_raw) > 1e-9:
+                    st.info(f"時間{i}は0.25単位で配分するため、{work_hours_raw} → {work_q} に丸めて計算します。")
+
+                alloc = split_hours_quarter(work_q, steps)
+                preview_rows = []
+                for jb, hh in zip(job_numbers, alloc):
+                    preview_rows.append({"工番": jb, "時間": f"{fmt_hours(hh)}時間"})
+                st.table(preview_rows)
+            else:
+                st.caption("工程数・工番・時間を入力すると、ここに配分結果が表示されます。")
+
+        # ==============================
+        # 通常フォーム
+        # ==============================
+        number = ""
+        time_txt = ""
+        hours = 0.0
+
+        if ready and not is_special:
+            number = st.text_input(
                 f"工番を入力{i}",
                 key=f"number_{i}",
                 placeholder="例: 51A111"
-            ).upper()
-            if genre != '選択してください' else ''
-        )
+            ).upper().strip()
 
-        time_txt = st.text_input(
-            f"時間を入力{i}",
-            key=f"time_{i}",
-            placeholder="例: 1.5（１．５ / 1,5 / 1.5h / 1.5時間 もOK）"
-        )
-        hours = parse_hours_maybe(time_txt)
-        if time_txt and hours == 0.0:
-            st.info(
-                f"時間{i}は数値で入力してください（1.5 / １．５ / 1,5 / 1.5h などOK）"
+            time_txt = st.text_input(
+                f"時間を入力{i}",
+                key=f"time_{i}",
+                placeholder="例: 1.5（１．５ / 1,5 / 1.5h / 1.5時間 もOK）"
             )
+            hours = parse_hours_maybe(time_txt)
+            if time_txt and hours == 0.0:
+                st.info(
+                    f"時間{i}は数値で入力してください（1.5 / １．５ / 1,5 / 1.5h などOK）"
+                )
+        elif not ready:
+            st.caption("メーカーと作業内容（雑務以外）を選択すると入力欄が表示されます。")
 
         return {
+            "i": i,
             "customer": customer,
             "new_customer": new_customer,
             "genre": genre,
+            "is_special": is_special,
+
+            # 通常フォーム
             "number": number,
-            "time": hours
+            "time": hours,
+
+            # 専用フォーム
+            "steps": steps,
+            "job_numbers": job_numbers,
+            "work_hours_raw": work_hours_raw,
+            "move_hours": move_hours,
+            "companion_names": companion_names,
         }
+
 
     # 今表示すべきフォーム数ぶん生成
     inputs = [create_input_fields(i) for i in range(1, st.session_state.form_count + 1)]
@@ -203,20 +379,50 @@ if name != '選択してください':
             # rerunなし。即座に行を増やして見せたい場合は st.rerun() が必要だけど
             # 古いStreamlit端末では使えないのでここは我慢。
 
-    # 入力チェック＋合計時間
+    # 入力チェック＋合計時間（専用フォームは複数行送信に展開）
     valid_inputs = []
     total_time = 0.0
+
     for inp in inputs:
         genre_ok = (
             inp["genre"] != "選択してください"
             or inp["customer"] == "雑務"
         )
-        if (
-            inp["customer"] != "選択してください"
-            and genre_ok
-            and inp["number"] != ''
-            and inp["time"] > 0
-        ):
+
+        if inp["customer"] == "選択してください" or not genre_ok:
+            continue
+
+        # 専用フォーム（社内トライ/パネル/客先トライ）
+        if inp["is_special"]:
+            steps = int(inp["steps"])
+            job_numbers = inp["job_numbers"][:steps]
+            work_q = quantize_quarter(inp["work_hours_raw"])
+
+            # 必須チェック
+            if steps < 1 or not all(job_numbers) or work_q <= 0:
+                continue
+
+            # 同行者（作業1の客先トライのみ）：名前が未選択なら送信不可
+            if inp["i"] == 1 and inp["genre"] == "客先トライ" and inp["companion_names"]:
+                if any(nm == "選択してください" for nm in inp["companion_names"]):
+                    continue
+
+            inp["alloc_hours"] = split_hours_quarter(work_q, steps)
+            inp["work_hours_q"] = work_q
+
+            task_total = work_q
+            if inp["genre"] == "客先トライ":
+                # 移動時間は0でも送れる（0なら0の行が入る）
+                task_total += max(0.0, inp["move_hours"])
+            inp["task_total"] = task_total
+
+            total_time += task_total
+            valid_inputs.append(inp)
+            continue
+
+        # 通常フォーム
+        if inp["number"] != '' and inp["time"] > 0:
+            inp["task_total"] = inp["time"]
             total_time += inp["time"]
             valid_inputs.append(inp)
 
@@ -236,18 +442,80 @@ if name != '選択してください':
                 # シート確保（準備で失敗してた場合もここで再try）
                 sheet = get_sheet_cached()
 
-                rows_to_append = []
-                for idx, inp in enumerate(valid_inputs, start=1):
-                    is_last = (idx == len(valid_inputs))
-                    rows_to_append.append([
-                        str(day),
-                        name,
-                        inp["new_customer"] if inp["customer"] == "その他メーカー" else inp["customer"],
-                        "" if inp["customer"] == "雑務" else inp["genre"],
-                        inp["number"],
-                        inp["time"],
-                        f"合計 {total_time:.2f} 時間" if is_last else ""
-                    ])
+                rows_main: list[list[str]] = []
+
+                # 本人分（作業追加も含めて全部）
+                for inp in valid_inputs:
+                    cust_cell = inp["new_customer"] if inp["customer"] == "その他メーカー" else inp["customer"]
+
+                    if inp["is_special"]:
+                        # 客先トライは先頭に「移動」行を追加
+                        if inp["genre"] == "客先トライ":
+                            rows_main.append([
+                                str(day),
+                                name,
+                                "雑務",
+                                "",
+                                "移動",
+                                fmt_hours(max(0.0, inp["move_hours"])),
+                                ""
+                            ])
+
+                        for jb, hh in zip(inp["job_numbers"][:inp["steps"]], inp["alloc_hours"]):
+                            rows_main.append([
+                                str(day),
+                                name,
+                                cust_cell,
+                                inp["genre"],
+                                jb,
+                                fmt_hours(hh),
+                                ""
+                            ])
+                    else:
+                        rows_main.append([
+                            str(day),
+                            name,
+                            cust_cell,
+                            "" if inp["customer"] == "雑務" else inp["genre"],
+                            inp["number"],
+                            fmt_hours(inp["time"]),
+                            ""
+                        ])
+
+                # 「合計」表示は本人分の最後の行だけに付ける
+                if rows_main:
+                    rows_main[-1][6] = f"合計 {total_time:.2f} 時間"
+
+                # 同行者分（作業1の客先トライ入力だけを複製して送信）
+                rows_companions: list[list[str]] = []
+                inp1 = next((x for x in valid_inputs if x.get("i") == 1 and x.get("genre") == "客先トライ"), None)
+                if inp1 and inp1.get("companion_names"):
+                    cust_cell1 = inp1["new_customer"] if inp1["customer"] == "その他メーカー" else inp1["customer"]
+
+                    for comp_name in inp1["companion_names"]:
+                        # 「移動」行
+                        rows_companions.append([
+                            str(day),
+                            comp_name,
+                            "雑務",
+                            "",
+                            "移動",
+                            fmt_hours(max(0.0, inp1["move_hours"])),
+                            ""
+                        ])
+                        # 工番配分行
+                        for jb, hh in zip(inp1["job_numbers"][:inp1["steps"]], inp1["alloc_hours"]):
+                            rows_companions.append([
+                                str(day),
+                                comp_name,
+                                cust_cell1,
+                                "客先トライ",
+                                jb,
+                                fmt_hours(hh),
+                                ""
+                            ])
+
+                rows_to_append = rows_main + rows_companions
 
                 sheet.append_rows(
                     rows_to_append,
@@ -284,19 +552,45 @@ if name != '選択してください':
                     if genre_key in st.session_state:
                         st.session_state[genre_key] = '選択してください'
 
-                    # フリーテキストは空に戻す
+                    # 専用フォーム系（工程数・工番群・時間など）
+                    steps_key = f"steps_{i}"
+                    if steps_key in st.session_state:
+                        st.session_state[steps_key] = 1
+
                     for text_key in (
                         f"new_customer_{i}",
                         f"number_{i}",
                         f"time_{i}",
+                        f"work_time_{i}",
+                        f"move_time_{i}",
                     ):
                         if text_key in st.session_state:
                             st.session_state[text_key] = ""
+
+                    # 工番群（最大50までリセット）
+                    for k in range(1, 51):
+                        jk = f"job_{i}_{k}"
+                        if jk in st.session_state:
+                            st.session_state[jk] = ""
+
+                    # 自動入力キャッシュ
+                    ak = f"auto_jobs_{i}"
+                    if ak in st.session_state:
+                        del st.session_state[ak]
+
+                # 同行者（作業1）
+                if "companion_count_1" in st.session_state:
+                    st.session_state["companion_count_1"] = "同行者なし"
+                for j in range(1, 11):
+                    k = f"companion_name_1_{j}"
+                    if k in st.session_state:
+                        st.session_state[k] = "選択してください"
 
             except Exception:
                 # ここは握りつぶす。送信自体はもう終わってるので
                 st.session_state.is_sending = False
                 pass
+
 
     # 送信中ロックが残ってしまった場合の保険
     if st.session_state.is_sending:
