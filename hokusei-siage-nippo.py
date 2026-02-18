@@ -497,6 +497,10 @@ if name != '選択してください':
                 if inp1 and inp1.get("companion_names"):
                     cust_cell1 = inp1["new_customer"] if inp1["customer"] == "その他メーカー" else inp1["customer"]
 
+                    # 同行者の合計は「作業1の客先トライ分だけ」（作業追加ぶんは含めない）
+                    comp_total = float(inp1.get("task_total", 0.0))
+                    comp_total_text = f"合計 {comp_total:.2f} 時間"
+
                     for comp_name in inp1["companion_names"]:
                         # 「移動」行
                         rows_companions.append([
@@ -508,7 +512,9 @@ if name != '選択してください':
                             fmt_hours(max(0.0, inp1["move_hours"])),
                             ""
                         ])
-                        # 工番配分行
+
+                        # 工番配分行（最後の工番行の位置を覚える）
+                        last_job_row_idx = None
                         for jb, hh in zip(inp1["job_numbers"][:inp1["steps"]], inp1["alloc_hours"]):
                             rows_companions.append([
                                 str(day),
@@ -519,6 +525,11 @@ if name != '選択してください':
                                 fmt_hours(hh),
                                 ""
                             ])
+                            last_job_row_idx = len(rows_companions) - 1
+
+                        # 同行者ごとの「合計」は“工番配分の最後の行”に固定（本人と同じ配置）
+                        if last_job_row_idx is not None:
+                            rows_companions[last_job_row_idx][6] = comp_total_text
 
                 rows_to_append = rows_main + rows_companions
 
