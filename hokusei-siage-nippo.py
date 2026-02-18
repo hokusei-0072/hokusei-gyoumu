@@ -33,7 +33,7 @@ def quantize_quarter(x: float) -> float:
     return round(x * 4) / 4.0
 
 def split_hours_quarter(total_hours: float, count: int) -> list[float]:
-    """合計時間を count 個に 0.25単位で配分（余りは先頭に寄せる）"""
+    """合計時間を count 個に 0.25単位で配分（余りは0.25ずつ先頭から順に配る）"""
     if count <= 0:
         return []
     total_q = quantize_quarter(total_hours)
@@ -41,7 +41,13 @@ def split_hours_quarter(total_hours: float, count: int) -> list[float]:
     units = int(round(total_q * 4))
     per = units // count
     rem = units % count
-    out_units = [per + rem] + [per] * (count - 1)
+
+    # まず全員に均等配分
+    out_units = [per] * count
+    # 余りを 0.25 (=1 unit) ずつ、先頭から順に配る
+    for idx in range(rem):
+        out_units[idx] += 1
+
     return [u / 4.0 for u in out_units]
 
 def fmt_hours(x: float) -> str:
@@ -238,14 +244,13 @@ if name != '選択してください':
                 if move_time_txt and move_hours == 0.0:
                     st.info(f"移動時間{i}は数値で入力してください（例: 1 / 1.5 / １．５）")
 
-            # 工程数（整数）
-            steps = int(st.number_input(
+            # 工程数（選択：1〜10 / 初期値=1）
+            steps = st.selectbox(
                 f"工程数{i}",
-                min_value=1,
-                step=1,
-                value=1,
+                options=list(range(1, 11)),
+                index=0,  # 初期値=1
                 key=f"steps_{i}"
-            ))
+            )
 
             # 工番：工程数ぶん表示（工番1の入力から連番自動入力）
             job1_key = f"job_{i}_1"
