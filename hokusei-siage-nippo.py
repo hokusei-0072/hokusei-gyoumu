@@ -12,7 +12,8 @@ import unicodedata
 import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
-from datetime import date, datetime
+from datetime import date, datetime, timedelta, timezone
+JST = timezone(timedelta(hours=9))  # 日本時間（UTC+9）
 
 ########################################
 # ユーティリティ
@@ -155,7 +156,8 @@ st.text(
 # 日付・名前
 ########################################
 
-day = st.date_input("日付を選択してください", value=date.today())
+day = st.date_input("日付を選択してください", value=datetime.now(JST).date())
+
 name = st.selectbox(
     "名前",
     (
@@ -447,8 +449,8 @@ if name != '選択してください':
                 # シート確保（準備で失敗してた場合もここで再try）
                 sheet = get_sheet_cached()
 
-                # 送信日時（この送信処理全体で共通）
-                now_dt = datetime.now()
+                # 送信日時（この送信処理全体で共通 / JST固定）
+                now_dt = datetime.now(JST)
                 sent_dt_text = f"{now_dt.month}月{now_dt.day}日{now_dt.hour}時{now_dt.minute}分"
 
                 def make_sent_header_row(person_name: str) -> list[str]:
