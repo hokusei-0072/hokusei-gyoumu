@@ -12,7 +12,7 @@ import unicodedata
 import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
-from datetime import date
+from datetime import date, datetime
 
 ########################################
 # ユーティリティ
@@ -447,6 +447,15 @@ if name != '選択してください':
                 # シート確保（準備で失敗してた場合もここで再try）
                 sheet = get_sheet_cached()
 
+                # 送信日時（この送信処理全体で共通）
+                now_dt = datetime.now()
+                sent_dt_text = f"{now_dt.month}月{now_dt.day}日{now_dt.hour}時{now_dt.minute}分"
+
+                def make_sent_header_row(person_name: str) -> list[str]:
+                    # 1列目=送信日時 / 2列目=名前 / 3列目=実際の送信日時
+                    # 既存の列数に合わせて4〜7列目は空欄
+                    return ["送信日時", person_name, sent_dt_text, "", "", "", ""]
+
                 rows_main: list[list[str]] = []
 
                 # 本人分（作業追加も含めて全部）
@@ -491,6 +500,10 @@ if name != '選択してください':
                 if rows_main:
                     rows_main[-1][6] = f"合計 {total_time:.2f} 時間"
 
+                # 本人ブロックの先頭に「送信日時」行を追加
+                if rows_main:
+                    rows_main = [make_sent_header_row(name)] + rows_main
+
                 # 同行者分（同行者が入力された「客先トライ」作業ごとに複製して送信）
                 rows_companions: list[list[str]] = []
 
@@ -505,6 +518,9 @@ if name != '選択してください':
                     comp_total_text = f"合計 {comp_total:.2f} 時間"
 
                     for comp_name in src["companion_names"]:
+                        # 同行者ブロックの先頭に「送信日時」行を追加
+                        rows_companions.append(make_sent_header_row(comp_name))
+
                         # 「移動」行
                         rows_companions.append([
                             str(day),
