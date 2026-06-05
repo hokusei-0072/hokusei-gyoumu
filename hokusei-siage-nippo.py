@@ -308,7 +308,7 @@ if name != '選択してください':
                             (
                                 "選択してください",
                                 "吉田", "中村", "渡辺", "福田", "苫米地", "矢部", "小野",
-                                "塩入", "トム", "ユン", "ティエン", "チョン", "アイン"
+                                "塩入", "小野(和)", "トム", "ユン", "ティエン", "チョン", "アイン"
                             ),
                             key=f"companion_name_{i}_{j}"
                         )
@@ -383,8 +383,12 @@ if name != '選択してください':
     if st.session_state.form_count < 10:
         if st.button("＋作業を追加"):
             st.session_state.form_count += 1
-            # rerunなし。即座に行を増やして見せたい場合は st.rerun() が必要だけど
-            # 古いStreamlit端末では使えないのでここは我慢。
+
+            # 作業フォーム数を増やした直後に再描画する。
+            # st.rerun() がない古いStreamlit環境では experimental_rerun() を使う。
+            rerun_func = getattr(st, "rerun", None) or getattr(st, "experimental_rerun", None)
+            if rerun_func is not None:
+                rerun_func()
 
     # 入力チェック＋合計時間（専用フォームは複数行送信に展開）
     valid_inputs = []
@@ -449,15 +453,6 @@ if name != '選択してください':
                 # シート確保（準備で失敗してた場合もここで再try）
                 sheet = get_sheet_cached()
 
-                # 送信日時（この送信処理全体で共通 / JST固定）
-                now_dt = datetime.now(JST)
-                sent_dt_text = f"{now_dt.month}月{now_dt.day}日{now_dt.hour}時{now_dt.minute}分"
-
-                def make_sent_header_row(person_name: str) -> list[str]:
-                    # 1列目=送信日時 / 2列目=名前 / 3列目=実際の送信日時
-                    # 既存の列数に合わせて4〜7列目は空欄
-                    return ["送信日時", person_name, sent_dt_text, "", "", "", ""]
-
                 rows_main: list[list[str]] = []
 
                 # 本人分（作業追加も含めて全部）
@@ -502,10 +497,6 @@ if name != '選択してください':
                 if rows_main:
                     rows_main[-1][6] = f"合計 {total_time:.2f} 時間"
 
-                # 本人ブロックの先頭に「送信日時」行を追加
-                if rows_main:
-                    rows_main = [make_sent_header_row(name)] + rows_main
-
                 # 同行者分（同行者が入力された「客先トライ」作業ごとに複製して送信）
                 rows_companions: list[list[str]] = []
 
@@ -520,8 +511,6 @@ if name != '選択してください':
                     comp_total_text = f"合計 {comp_total:.2f} 時間"
 
                     for comp_name in src["companion_names"]:
-                        # 同行者ブロックの先頭に「送信日時」行を追加
-                        rows_companions.append(make_sent_header_row(comp_name))
 
                         # 「移動」行
                         rows_companions.append([
